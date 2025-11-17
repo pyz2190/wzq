@@ -11,6 +11,11 @@
 #include <time.h>
 #include <limits.h>
 
+// Windows平台特殊处理
+#ifdef _WIN32
+    #include <windows.h>
+#endif
+
 /* ==================== 常量定义 ==================== */
 
 #define BOARD_SIZE 12
@@ -81,11 +86,17 @@ const int dir_y[4] = {0, 1, 1, -1};
 
 /* ==================== 时间管理函数 ==================== */
 
-// 获取当前时间（毫秒）
+// 获取当前时间（毫秒）- 跨平台实现
 long long get_time_ms() {
+#ifdef _WIN32
+    // Windows实现：使用GetTickCount64
+    return (long long)GetTickCount64();
+#else
+    // Linux/POSIX实现：使用clock_gettime
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return ts.tv_sec * 1000LL + ts.tv_nsec / 1000000LL;
+#endif
 }
 
 // 初始化时间管理器
