@@ -1,5 +1,7 @@
 # 编译产物
 gomoku_ai
+gomoku_refactored/gomoku_refactored
+gomoku_refactored/*.o
 *.o
 *.out
 *.exe
