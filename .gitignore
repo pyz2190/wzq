@@ -2,6 +2,8 @@
 gomoku_ai
 gomoku_refactored/gomoku_refactored
 gomoku_refactored/*.o
+gomoku_v2/gomoku_v2
+gomoku_v2/*.o
 *.o
 *.out
 *.exe
