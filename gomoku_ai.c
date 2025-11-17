@@ -38,7 +38,7 @@
 
 // 搜索参数
 #define MAX_CANDIDATES 15
-#define NEIGHBOR_RADIUS 3
+#define MIN_SCORE_THRESHOLD 5  // 最低评分阈值，低于此值的候选位置不考虑
 #define INF 999999999
 
 // 时间控制（毫秒）
@@ -220,22 +220,6 @@ int check_five(Board* board, int row, int col, int color) {
     return 0;
 }
 
-// 检查邻域内是否有棋子
-int has_neighbor(Board* board, int row, int col, int radius) {
-    int dr, dc;
-    for (dr = -radius; dr <= radius; dr++) {
-        for (dc = -radius; dc <= radius; dc++) {
-            if (dr == 0 && dc == 0) continue;
-            int nr = row + dr;
-            int nc = col + dc;
-            if (in_bounds(nr, nc) && board->grid[nr][nc] != EMPTY) {
-                return 1;
-            }
-        }
-    }
-    return 0;
-}
-
 /* ==================== 评估函数 ==================== */
 
 // 判断棋型得分
@@ -351,29 +335,45 @@ int compare_moves(const void* a, const void* b) {
     return mb->priority - ma->priority;  // 降序
 }
 
-// 生成候选走法
+// 生成候选走法（基于评分筛选）
 int generate_candidates(SearchContext* ctx, Move* candidates, int for_side) {
     Board* board = ctx->board;
     int count = 0;
     int r, c;
-    int attack, defense;
+    int attack, defense, total_value;
     int enemy = (for_side == BLACK) ? WHITE : BLACK;
+
+    // 计算动态阈值：根据棋局阶段调整筛选标准
+    int move_count = board->move_count;
+    int threshold = MIN_SCORE_THRESHOLD;
+
+    // 开局阶段：更宽松的筛选（允许更多候选位置）
+    if (move_count < 12) {
+        threshold = 0;  // 开局考虑所有位置
+    } else if (move_count < 30) {
+        threshold = MIN_SCORE_THRESHOLD;
+    } else {
+        // 中后局：提高阈值，聚焦高价值位置
+        threshold = MIN_SCORE_THRESHOLD * 2;
+    }
 
     for (r = 0; r < BOARD_SIZE; r++) {
         for (c = 0; c < BOARD_SIZE; c++) {
             if (board->grid[r][c] != EMPTY) continue;
 
-            // 邻域过滤
-            if (!has_neighbor(board, r, c, NEIGHBOR_RADIUS)) continue;
-
-            // 评估该点价值
+            // 评估该点的攻击和防守价值
             attack = evaluate_point(board, r, c, for_side);
             defense = evaluate_point(board, r, c, enemy);
 
+            // 计算综合价值（攻防权重 11:9）
+            total_value = attack * 11 + defense * 9;
+
+            // 基于评分的智能筛选：只保留有价值的位置
+            if (total_value < threshold) continue;
+
             candidates[count].row = r;
             candidates[count].col = c;
-            // 攻防权重 11:9
-            candidates[count].priority = attack * 11 + defense * 9;
+            candidates[count].priority = total_value;
             count++;
 
             if (count >= 256) break;  // 防止溢出
@@ -381,7 +381,7 @@ int generate_candidates(SearchContext* ctx, Move* candidates, int for_side) {
         if (count >= 256) break;
     }
 
-    // 排序
+    // 排序：优先级从高到低
     qsort(candidates, count, sizeof(Move), compare_moves);
 
     // 截断到MAX_CANDIDATES
