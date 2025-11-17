@@ -455,8 +455,8 @@ static int32_t Eval_ComputeBoard(BoardState_t* ptrBoard, uint8_t bAiColor, uint8
         }
     }
 
-    // Use bit shift for division by power of 2
-    return lAiTotal - ((lEnemyTotal * 85) >> 7);  // Divide by 128 instead of 100
+    // Asymmetric weighting: offense slightly favored over defense (85%)
+    return lAiTotal - (lEnemyTotal * 85 / 100);
 }
 
 // ============================================================================
