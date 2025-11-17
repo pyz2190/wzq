@@ -92,20 +92,16 @@ const int dir_y[4] = {0, 1, 1, -1};
 // 获取当前时间（毫秒）- 跨平台实现
 long long get_time_ms() {
 #if IS_WINDOWS
-    // Windows实现：使用GetTickCount64（Vista及以上）
-    // 如果编译器太老不支持GetTickCount64，使用GetTickCount
-    #if defined(__MINGW32__) && !defined(__MINGW64__)
-        // 32位MinGW可能不支持GetTickCount64，使用GetTickCount
-        return (long long)GetTickCount();
-    #else
-        // 64位或现代编译器使用GetTickCount64
-        return (long long)GetTickCount64();
-    #endif
-#else
+    // Windows实现：使用GetTickCount（兼容所有Windows版本和MinGW）
+    return (long long)GetTickCount();
+#elif defined(__linux__) || defined(__unix__) || defined(__APPLE__)
     // Linux/POSIX实现：使用clock_gettime
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return ts.tv_sec * 1000LL + ts.tv_nsec / 1000000LL;
+#else
+    // 备用方案：使用标准C库（适用于所有平台）
+    return (long long)(clock() * 1000.0 / CLOCKS_PER_SEC);
 #endif
 }
 
