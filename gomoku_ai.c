@@ -11,9 +11,12 @@
 #include <time.h>
 #include <limits.h>
 
-// Windows平台特殊处理
-#ifdef _WIN32
+// Windows平台特殊处理（支持多种编译器）
+#if defined(_WIN32) || defined(__WIN32__) || defined(WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
+    #define IS_WINDOWS 1
     #include <windows.h>
+#else
+    #define IS_WINDOWS 0
 #endif
 
 /* ==================== 常量定义 ==================== */
@@ -88,9 +91,16 @@ const int dir_y[4] = {0, 1, 1, -1};
 
 // 获取当前时间（毫秒）- 跨平台实现
 long long get_time_ms() {
-#ifdef _WIN32
-    // Windows实现：使用GetTickCount64
-    return (long long)GetTickCount64();
+#if IS_WINDOWS
+    // Windows实现：使用GetTickCount64（Vista及以上）
+    // 如果编译器太老不支持GetTickCount64，使用GetTickCount
+    #if defined(__MINGW32__) && !defined(__MINGW64__)
+        // 32位MinGW可能不支持GetTickCount64，使用GetTickCount
+        return (long long)GetTickCount();
+    #else
+        // 64位或现代编译器使用GetTickCount64
+        return (long long)GetTickCount64();
+    #endif
 #else
     // Linux/POSIX实现：使用clock_gettime
     struct timespec ts;
