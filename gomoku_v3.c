@@ -428,26 +428,34 @@ static void Scanner_AnalyzeDirection(BoardState_t* ptrBoard, int16_t iPos, int16
 
 // Evaluate position for player
 static int32_t Eval_ComputePosition(BoardState_t* ptrBoard, int16_t iPos, uint8_t bPlayer) {
+    int16_t rgDeltas[4];
+    int32_t lTotalScore;
+    uint8_t bDirIdx;
+    uint8_t bCount, bOpens;
+    uint8_t bCntIdx, bOpnIdx;
+
     if (!bIsValidPos(iPos)) return 0;
     if (ptrBoard->rgCells[iPos] != eEmptyCell) return 0;
 
-    int16_t rgDeltas[4] = {1, eBoardSize, eBoardSize + 1, eBoardSize - 1};
+    rgDeltas[0] = 1;
+    rgDeltas[1] = eBoardSize;
+    rgDeltas[2] = eBoardSize + 1;
+    rgDeltas[3] = eBoardSize - 1;
 
-    int32_t lTotalScore = 0;
-    uint8_t bDirIdx = 0;
+    lTotalScore = 0;
+    bDirIdx = 0;
 
     eval_next_dir:
     if (bDirIdx >= 4) goto eval_finished;
 
     ptrBoard->rgCells[iPos] = bPlayer;
 
-    uint8_t bCount, bOpens;
     Scanner_AnalyzeDirection(ptrBoard, iPos, rgDeltas[bDirIdx], bPlayer, &bCount, &bOpens);
 
     ptrBoard->rgCells[iPos] = eEmptyCell;
 
-    uint8_t bCntIdx = (bCount > 5) ? 5 : bCount;
-    uint8_t bOpnIdx = (bOpens > 2) ? 2 : bOpens;
+    bCntIdx = (bCount > 5) ? 5 : bCount;
+    bOpnIdx = (bOpens > 2) ? 2 : bOpens;
 
     lTotalScore += rglPatternScores[bCntIdx][bOpnIdx];
 
@@ -460,15 +468,19 @@ static int32_t Eval_ComputePosition(BoardState_t* ptrBoard, int16_t iPos, uint8_
 
 // Full board evaluation
 static int32_t Eval_ComputeBoard(BoardState_t* ptrBoard, uint8_t bAiColor, uint8_t bEnemyColor) {
-    int32_t lAiTotal = 0;
-    int32_t lEnemyTotal = 0;
+    int32_t lAiTotal;
+    int32_t lEnemyTotal;
+    int16_t iPos;
+    uint8_t bCell;
 
-    int16_t iPos = 0;
+    lAiTotal = 0;
+    lEnemyTotal = 0;
+    iPos = 0;
 
     eval_board_loop:
     if (iPos >= eTotalCells) goto eval_board_end;
 
-    uint8_t bCell = ptrBoard->rgCells[iPos];
+    bCell = ptrBoard->rgCells[iPos];
 
     if (bCell == bAiColor) {
         ptrBoard->rgCells[iPos] = eEmptyCell;
@@ -541,13 +553,23 @@ static void Engine_Cleanup(EngineContext_t* ptrEngine) {
 
 // Generate move candidates
 static int iGenerateMoves(EngineContext_t* ptrEngine, MoveOption_t* rgCands, uint8_t bForPlayer) {
-    BoardState_t* ptrBoard = ptrEngine->ptrBoard;
-    uint8_t bEnemy = (bForPlayer == eBlackStone) ? eWhiteStone : eBlackStone;
+    BoardState_t* ptrBoard;
+    uint8_t bEnemy;
+    int iCount;
+    int16_t iPos;
+    int iThreshold;
+    int32_t lAttack, lDefense, lCombined;
+    int bChanged;
+    int i;
+    MoveOption_t temp;
 
-    int iCount = 0;
-    int16_t iPos = 0;
+    ptrBoard = ptrEngine->ptrBoard;
+    bEnemy = (bForPlayer == eBlackStone) ? eWhiteStone : eBlackStone;
 
-    int iThreshold = eMinScoreThreshold;
+    iCount = 0;
+    iPos = 0;
+
+    iThreshold = eMinScoreThreshold;
     if (ptrBoard->wPlyCount < 12) {
         iThreshold = 0;
     } else if (ptrBoard->wPlyCount >= 30) {
@@ -563,10 +585,10 @@ static int iGenerateMoves(EngineContext_t* ptrEngine, MoveOption_t* rgCands, uin
         goto gen_move_loop;
     }
 
-    int32_t lAttack = Eval_ComputePosition(ptrBoard, iPos, bForPlayer);
-    int32_t lDefense = Eval_ComputePosition(ptrBoard, iPos, bEnemy);
+    lAttack = Eval_ComputePosition(ptrBoard, iPos, bForPlayer);
+    lDefense = Eval_ComputePosition(ptrBoard, iPos, bEnemy);
 
-    int32_t lCombined = lAttack * 11 + lDefense * 9;
+    lCombined = lAttack * 11 + lDefense * 9;
 
     if (lCombined < iThreshold) {
         iPos++;
@@ -583,18 +605,18 @@ static int iGenerateMoves(EngineContext_t* ptrEngine, MoveOption_t* rgCands, uin
     gen_sort_moves:
     if (iCount <= 1) goto gen_complete;
 
-    int bChanged = 1;
+    bChanged = 1;
     bubble_outer_loop:
     if (!bChanged) goto gen_complete;
 
     bChanged = 0;
-    int i = 0;
+    i = 0;
 
     bubble_inner_loop:
     if (i >= iCount - 1) goto bubble_outer_loop;
 
     if (rgCands[i].lScore < rgCands[i + 1].lScore) {
-        MoveOption_t temp = rgCands[i];
+        temp = rgCands[i];
         rgCands[i] = rgCands[i + 1];
         rgCands[i + 1] = temp;
         bChanged = 1;
@@ -631,6 +653,16 @@ static int16_t iFindCriticalMove(EngineContext_t* ptrEngine, uint8_t bPlayer) {
 static int32_t lPvSearch(EngineContext_t* ptrEngine, int iDepth, int32_t lAlpha, int32_t lBeta, int bIsPv);
 
 static int32_t lPvSearch(EngineContext_t* ptrEngine, int iDepth, int32_t lAlpha, int32_t lBeta, int bIsPv) {
+    MoveOption_t rgCandidates[eTotalCells];
+    uint8_t bCurrent;
+    int iNumMoves;
+    int bMaximizing;
+    int32_t lBest;
+    int iMoveIdx;
+    int bIsFirst;
+    int16_t iPos;
+    int32_t lScore;
+
     if ((ptrEngine->dwNodeCount & 1023) == 0) {
         if (llGetTimeMillis() >= ptrEngine->llDeadline) {
             return Eval_ComputeBoard(ptrEngine->ptrBoard, ptrEngine->bAiColor, ptrEngine->bEnemyColor);
@@ -643,25 +675,24 @@ static int32_t lPvSearch(EngineContext_t* ptrEngine, int iDepth, int32_t lAlpha,
         return Eval_ComputeBoard(ptrEngine->ptrBoard, ptrEngine->bAiColor, ptrEngine->bEnemyColor);
     }
 
-    MoveOption_t rgCandidates[eTotalCells];
-    uint8_t bCurrent = ptrEngine->ptrBoard->bCurrentPlayer;
-    int iNumMoves = iGenerateMoves(ptrEngine, rgCandidates, bCurrent);
+    bCurrent = ptrEngine->ptrBoard->bCurrentPlayer;
+    iNumMoves = iGenerateMoves(ptrEngine, rgCandidates, bCurrent);
 
     if (iNumMoves == 0) {
         return Eval_ComputeBoard(ptrEngine->ptrBoard, ptrEngine->bAiColor, ptrEngine->bEnemyColor);
     }
 
-    int bMaximizing = (bCurrent == ptrEngine->bAiColor) ? 1 : 0;
+    bMaximizing = (bCurrent == ptrEngine->bAiColor) ? 1 : 0;
 
     if (bMaximizing) {
-        int32_t lBest = INT_MIN;
-        int iMoveIdx = 0;
-        int bIsFirst = 1;
+        lBest = INT_MIN;
+        iMoveIdx = 0;
+        bIsFirst = 1;
 
         max_search_loop:
         if (iMoveIdx >= iNumMoves) goto max_search_done;
 
-        int16_t iPos = rgCandidates[iMoveIdx].iPosition;
+        iPos = rgCandidates[iMoveIdx].iPosition;
 
         Board_MakeMove(ptrEngine->ptrBoard, iPos, bCurrent);
 
@@ -669,8 +700,6 @@ static int32_t lPvSearch(EngineContext_t* ptrEngine, int iDepth, int32_t lAlpha,
             Board_UndoMove(ptrEngine->ptrBoard);
             return eWinningScore - iDepth;
         }
-
-        int32_t lScore;
 
         if (bIsFirst) {
             lScore = lPvSearch(ptrEngine, iDepth - 1, lAlpha, lBeta, bIsPv);
@@ -696,14 +725,14 @@ static int32_t lPvSearch(EngineContext_t* ptrEngine, int iDepth, int32_t lAlpha,
         max_search_done:
         return lBest;
     } else {
-        int32_t lBest = INT_MAX;
-        int iMoveIdx = 0;
-        int bIsFirst = 1;
+        lBest = INT_MAX;
+        iMoveIdx = 0;
+        bIsFirst = 1;
 
         min_search_loop:
         if (iMoveIdx >= iNumMoves) goto min_search_done;
 
-        int16_t iPos = rgCandidates[iMoveIdx].iPosition;
+        iPos = rgCandidates[iMoveIdx].iPosition;
 
         Board_MakeMove(ptrEngine->ptrBoard, iPos, bCurrent);
 
@@ -711,8 +740,6 @@ static int32_t lPvSearch(EngineContext_t* ptrEngine, int iDepth, int32_t lAlpha,
             Board_UndoMove(ptrEngine->ptrBoard);
             return -eWinningScore + iDepth;
         }
-
-        int32_t lScore;
 
         if (bIsFirst) {
             lScore = lPvSearch(ptrEngine, iDepth - 1, lAlpha, lBeta, bIsPv);
@@ -742,45 +769,55 @@ static int32_t lPvSearch(EngineContext_t* ptrEngine, int iDepth, int32_t lAlpha,
 
 // Iterative deepening search
 static int16_t iSearchBestMove(EngineContext_t* ptrEngine, int iTimeLimitMs) {
+    int16_t iWinMove, iBlockMove;
+    MoveOption_t rgCandidates[eTotalCells];
+    int iNumMoves;
+    int16_t iBestMove;
+    int iMaxDepth;
+    int iDepth;
+    int32_t lBestScore, lAlpha, lBeta;
+    int iMoveIdx;
+    int16_t iPos;
+    int32_t lScore;
+
     ptrEngine->llStartTime = llGetTimeMillis();
     ptrEngine->llDeadline = ptrEngine->llStartTime + iTimeLimitMs;
     ptrEngine->dwNodeCount = 0;
 
-    int16_t iWinMove = iFindCriticalMove(ptrEngine, ptrEngine->bAiColor);
+    iWinMove = iFindCriticalMove(ptrEngine, ptrEngine->bAiColor);
     if (iWinMove >= 0) return iWinMove;
 
-    int16_t iBlockMove = iFindCriticalMove(ptrEngine, ptrEngine->bEnemyColor);
+    iBlockMove = iFindCriticalMove(ptrEngine, ptrEngine->bEnemyColor);
     if (iBlockMove >= 0) return iBlockMove;
 
-    MoveOption_t rgCandidates[eTotalCells];
-    int iNumMoves = iGenerateMoves(ptrEngine, rgCandidates, ptrEngine->bAiColor);
+    iNumMoves = iGenerateMoves(ptrEngine, rgCandidates, ptrEngine->bAiColor);
 
     if (iNumMoves == 0) return (eBoardSize >> 1) * eBoardSize + (eBoardSize >> 1);
 
-    int16_t iBestMove = rgCandidates[0].iPosition;
+    iBestMove = rgCandidates[0].iPosition;
 
-    int iMaxDepth = 6;
+    iMaxDepth = 6;
     if (ptrEngine->ptrBoard->wPlyCount < 10) {
         iMaxDepth = 4;
     } else if (ptrEngine->ptrBoard->wPlyCount >= 80) {
         iMaxDepth = 8;
     }
 
-    int iDepth = 1;
+    iDepth = 1;
 
     iterative_deepening:
     if (iDepth > iMaxDepth) goto id_finished;
     if (llGetTimeMillis() >= ptrEngine->llDeadline) goto id_finished;
 
-    int32_t lBestScore = INT_MIN;
-    int32_t lAlpha = INT_MIN;
-    int32_t lBeta = INT_MAX;
-    int iMoveIdx = 0;
+    lBestScore = INT_MIN;
+    lAlpha = INT_MIN;
+    lBeta = INT_MAX;
+    iMoveIdx = 0;
 
     search_all_moves:
     if (iMoveIdx >= iNumMoves) goto next_iteration;
 
-    int16_t iPos = rgCandidates[iMoveIdx].iPosition;
+    iPos = rgCandidates[iMoveIdx].iPosition;
 
     Board_MakeMove(ptrEngine->ptrBoard, iPos, ptrEngine->bAiColor);
 
@@ -789,7 +826,7 @@ static int16_t iSearchBestMove(EngineContext_t* ptrEngine, int iTimeLimitMs) {
         return iPos;
     }
 
-    int32_t lScore = lPvSearch(ptrEngine, iDepth - 1, lAlpha, lBeta, 1);
+    lScore = lPvSearch(ptrEngine, iDepth - 1, lAlpha, lBeta, 1);
 
     Board_UndoMove(ptrEngine->ptrBoard);
 
@@ -893,23 +930,28 @@ static void Cmd_HandleStart(const char* pszLine) {
 // PLACE command handler
 static void Cmd_HandlePlace(const char* pszLine) {
     int iRow, iCol;
+    int16_t iPos;
+
     sscanf(pszLine, "PLACE %d %d", &iRow, &iCol);
 
-    int16_t iPos = iMakePos(iRow, iCol);
+    iPos = iMakePos(iRow, iCol);
     Board_MakeMove(&ctx.board, iPos, ctx.bOppColor);
 }
 
 // TURN command handler
 static void Cmd_HandleTurn(const char* pszLine) {
+    int16_t iBestPos;
+    int iRow, iCol;
+
     (void)pszLine;
     ctx.eState = eStateComputing;
 
-    int16_t iBestPos = iSearchBestMove(&ctx.engine, eTurnTimeLimit);
+    iBestPos = iSearchBestMove(&ctx.engine, eTurnTimeLimit);
 
     Board_MakeMove(&ctx.board, iBestPos, ctx.bMyColor);
 
-    int iRow = iGetRow(iBestPos);
-    int iCol = iGetCol(iBestPos);
+    iRow = iGetRow(iBestPos);
+    iCol = iGetCol(iBestPos);
 
     printf("%d %d\n", iRow, iCol);
     fflush(stdout);
@@ -930,6 +972,7 @@ static void Cmd_HandleEnd(const char* pszLine) {
 
 int main(void) {
     char szBuffer[256];
+    char* pszNewline;
 
     ctx.eState = eStateInitial;
 
@@ -938,7 +981,7 @@ int main(void) {
 
     if (!fgets(szBuffer, sizeof(szBuffer), stdin)) goto program_cleanup;
 
-    char* pszNewline = strchr(szBuffer, '\n');
+    pszNewline = strchr(szBuffer, '\n');
     if (pszNewline) *pszNewline = '\0';
 
     Dispatcher_ProcessCommand(szBuffer);
