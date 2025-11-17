@@ -8,6 +8,7 @@ gomoku_v2/*.o
 gomoku_repair
 gomoku_v3
 gomoku_v4
+gomoku_v4_test
 *.o
 *.out
 *.exe
