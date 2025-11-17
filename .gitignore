@@ -1,0 +1,14 @@
+# 编译产物
+gomoku_ai
+*.o
+*.out
+*.exe
+
+# 临时文件
+*.tmp
+*.log
+
+# IDE文件
+.vscode/
+.idea/
+*.swp
