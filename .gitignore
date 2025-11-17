@@ -1,6 +1,7 @@
 # 编译产物
 gomoku_ai
 gomoku_ai_universal
+gomoku_ai_refactored
 gomoku_refactored/gomoku_refactored
 gomoku_refactored/*.o
 gomoku_v2/gomoku_v2
