@@ -6,6 +6,7 @@ gomoku_refactored/*.o
 gomoku_v2/gomoku_v2
 gomoku_v2/*.o
 gomoku_repair
+gomoku_v3
 *.o
 *.out
 *.exe
